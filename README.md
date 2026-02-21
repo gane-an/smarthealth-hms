@@ -156,44 +156,10 @@ Recommended:
 Once this project is pushed to GitHub, clone it on any new system:
 
 ```bash
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/gane-an/smarthealth-hms.git
+cd hospital-mgnt-sys
 ```
 
-Replace `<your-username>` and `<your-repo>` with your actual GitHub username and repository name.
-
-### Pushing this Project to GitHub
-
-If you are starting from this local folder and want to push it to GitHub:
-
-1. Create a new empty repository on GitHub (without README, license, or .gitignore).
-2. In the project root, initialize Git and make the initial commit:
-
-   ```bash
-   cd "c:/Users/ELCOT/Desktop/HMS 1.3/hospital-mgnt-sys"
-   git init
-   git add .
-   git commit -m "Initial commit: SmartHealth hospital management system"
-   ```
-
-3. Set the default branch to `main` (if not already):
-
-   ```bash
-   git branch -M main
-   ```
-
-4. Add the GitHub remote and push:
-
-   ```bash
-   git remote add origin https://github.com/<your-username>/<your-repo>.git
-   git push -u origin main
-   ```
-
-5. Before pushing, make sure sensitive configuration is not committed publicly. At minimum:
-   - Do not commit real passwords, secrets or production connection strings.
-   - Consider adding `.env` and `server/.env` to `.gitignore` and re‑creating them manually on each environment.
-
----
 
 ## Environment Configuration
 
@@ -201,7 +167,7 @@ The project uses separate environment files for frontend and backend.
 
 ### Frontend .env
 
-Location: [`./.env`](file:///c:/Users/ELCOT/Desktop/HMS%201.3/hospital-mgnt-sys/.env)
+Location: [`./.env`]
 
 Example content:
 
@@ -209,11 +175,11 @@ Example content:
 VITE_APP_ID=app-9nsq8l8utrsx
 ```
 
-You generally do not need to change this for local development unless you integrate additional services.
+You generally `do not` need to change this for local development unless you integrate additional services.
 
 ### Backend .env
 
-Location: [`./server/.env`](file:///c:/Users/ELCOT/Desktop/HMS%201.3/hospital-mgnt-sys/server/.env)
+Location: [`./server/.env`]
 
 Example content for local development:
 
@@ -241,11 +207,11 @@ Run these commands after cloning the repository.
 From the project root:
 
 ```bash
-cd <project-root>
+cd hospital-mgnt-sys
 npm install
 ```
 
-This installs all dependencies defined in the root [`package.json`](file:///c:/Users/ELCOT/Desktop/HMS%201.3/hospital-mgnt-sys/package.json).
+This installs all dependencies defined in the root [`package.json`]
 
 ### Backend
 
@@ -256,29 +222,45 @@ cd server
 npm install
 ```
 
-This installs backend dependencies defined in [`server/package.json`](file:///c:/Users/ELCOT/Desktop/HMS%201.3/hospital-mgnt-sys/server/package.json).
+This installs backend dependencies defined in [`server/package.json`]
 
 ---
 
 ## Database Setup
 
-### Create Database and User
+## Create Database and User (Using MySQL Workbench GUI)
 
-Connect to MySQL (for example, using the MySQL CLI or a GUI such as MySQL Workbench) and create a database and user:
+### 1️⃣ Create Database (Schema)
 
-```sql
-CREATE DATABASE smarthealth CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+1. Open **MySQL Workbench** and connect to your local server.
+2. In the left panel, right-click on **Schemas**.
+3. Click **Create Schema**.
+4. Enter the schema name: `smarthealth`
+5. Set:
+- Character Set: `utf8mb4`
+- Collation: `utf8mb4_unicode_ci`
+6. Click **Apply → Apply → Finish**.
 
-CREATE USER 'smarthealth_user'@'localhost' IDENTIFIED BY 'strong-password';
-GRANT ALL PRIVILEGES ON smarthealth.* TO 'smarthealth_user'@'localhost';
-FLUSH PRIVILEGES;
-```
 
-Update `DATABASE_URL` in `server/.env` accordingly, for example:
+---
+
+### 3️⃣ Grant Privileges
+
+1. Go to the **Schema Privileges** tab.
+2. Click **Add Entry**.
+3. Select the `smarthealth` schema.
+4. Click **OK**.
+5. Select **ALL PRIVILEGES**.
+6. Click **Apply → Apply → Finish**.
+
+---
+
+### 4️⃣ Update Environment File
+
+Update `server/.env`:
 
 ```env
-DATABASE_URL="mysql://smarthealth_user:strong-password@localhost:3306/smarthealth"
-```
+DATABASE_URL="mysql://root:strong-password@localhost:3306/smarthealth"
 
 ### Apply Prisma Schema
 
@@ -319,12 +301,14 @@ You typically run frontend and backend in two terminals.
    In another terminal, from the project root:
 
    ```bash
-   cd <project-root>
+   cd hospital-mgnt-sys
    npx vite --config vite.config.dev.ts --host 127.0.0.1 --port 5173
    ```
 
    Then open http://127.0.0.1:5173 in your browser.
 
+
+### (Optional)
 ### Production Mode
 
 In production you usually:
@@ -334,7 +318,7 @@ In production you usually:
    From the project root:
 
    ```bash
-   cd <project-root>
+   cd hospital-mgnt-sys
    npx vite build --config vite.config.ts
    ```
 
@@ -360,7 +344,7 @@ In production you usually:
 
 The seed script initializes the database with realistic demo data so you can use the application immediately after setup.
 
-Script location: [`server/prisma/seed.js`](file:///c:/Users/ELCOT/Desktop/HMS%201.3/hospital-mgnt-sys/server/prisma/seed.js)
+Script location: [`server/prisma/seed.js`]
 
 ### What the Seed Script Creates
 
@@ -444,7 +428,7 @@ cd server
 npx prisma db seed
 ```
 
-Both commands execute `server/prisma/seed.js` as configured in [`server/package.json`](file:///c:/Users/ELCOT/Desktop/HMS%201.3/hospital-mgnt-sys/server/package.json).
+Both commands execute `server/prisma/seed.js` as configured in [`server/package.json`].
 
 ### Expected Output and Success Indicators
 
