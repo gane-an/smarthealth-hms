@@ -1,18 +1,173 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, FileText, Send, X, PlusCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileText, Send, X, PlusCircle, CheckCircle, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
+import api from '@/services/api';
+
+type PrefillState = {
+  fromDashboard?: boolean;
+  patient?: {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string | null;
+  };
+  appointment?: {
+    id: string;
+    date: string;
+    timeSlot: string;
+    queueNumber: number;
+    reasonForVisit: string;
+    isEmergency: boolean;
+  };
+} | null;
+
+type DoctorAppointmentDto = {
+  id: string;
+  date: string;
+  timeSlot: string;
+  queueNumber: number;
+  reasonForVisit?: string | null;
+  patient: {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string | null;
+  };
+};
+
+type MedicalRecordDto = {
+  id: string;
+  appointmentId: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  storagePath: string;
+  createdAt: string;
+};
 
 const UploadPrescription: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const prefill = (location.state as PrefillState) || null;
   const [patient, setPatient] = useState('');
   const [medicines, setMedicines] = useState([{ name: '', dosage: '', duration: '' }]);
+  const [diagnosis, setDiagnosis] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [appointments, setAppointments] = useState<DoctorAppointmentDto[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+  const [records, setRecords] = useState<MedicalRecordDto[]>([]);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+
+  useEffect(() => {
+    if (prefill && prefill.patient) {
+      setPatient(prefill.patient.id);
+      if (prefill.appointment && prefill.appointment.reasonForVisit) {
+        setDiagnosis(prefill.appointment.reasonForVisit);
+      }
+    }
+  }, [prefill]);
+
+  useEffect(() => {
+    if (prefill && prefill.patient && prefill.appointment) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAppointments = async () => {
+      try {
+        setAppointmentsLoading(true);
+        const res = await api.get<DoctorAppointmentDto[]>('/doctor/appointments');
+        if (!cancelled) {
+          setAppointments(res.data || []);
+        }
+      } catch {
+        if (!cancelled) {
+          setAppointments([]);
+          toast.error('Failed to load appointments');
+        }
+      } finally {
+        if (!cancelled) {
+          setAppointmentsLoading(false);
+        }
+      }
+    };
+
+    loadAppointments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prefill]);
+
+  useEffect(() => {
+    const activeAppointmentId = prefill?.appointment?.id || patient;
+    if (!activeAppointmentId) {
+      setRecords([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRecords = async () => {
+      try {
+        setRecordsLoading(true);
+        const res = await api.get<MedicalRecordDto[]>(
+          `/doctor/appointments/${activeAppointmentId}/records`,
+        );
+        if (!cancelled) {
+          setRecords(res.data || []);
+        }
+      } catch {
+        if (!cancelled) {
+          setRecords([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setRecordsLoading(false);
+        }
+      }
+    };
+
+    loadRecords();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prefill?.appointment?.id, patient]);
+
+  const handleDownloadRecord = async (record: MedicalRecordDto) => {
+    const activeAppointmentId = prefill?.appointment?.id || patient;
+    if (!activeAppointmentId) {
+      return;
+    }
+    try {
+      const res = await api.get(
+        `/doctor/appointments/${activeAppointmentId}/records/${record.id}/download`,
+        { responseType: 'blob' },
+      );
+      const contentType =
+        res.headers['content-type'] || record.fileType || 'application/octet-stream';
+      const blob = new Blob([res.data], { type: contentType });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = record.fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Failed to download medical record');
+    }
+  };
 
   const addMedicine = () => {
     setMedicines([...medicines, { name: '', dosage: '', duration: '' }]);
@@ -22,10 +177,44 @@ const UploadPrescription: React.FC = () => {
     setMedicines(medicines.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success("Prescription uploaded and patient notified.");
-    navigate('/doctor');
+    if (submitting) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      if (prefill && prefill.patient && prefill.appointment) {
+        await api.post('/doctor/prescriptions', {
+          appointmentId: prefill.appointment.id,
+          patientId: prefill.patient.id,
+          diagnosis,
+          medicines,
+        });
+      } else {
+        const selectedAppointment = appointments.find((apt) => apt.id === patient);
+        if (!selectedAppointment) {
+          toast.error('Please select a patient appointment');
+          setSubmitting(false);
+          return;
+        }
+        await api.post('/doctor/prescriptions', {
+          appointmentId: selectedAppointment.id,
+          patientId: selectedAppointment.patient.id,
+          diagnosis,
+          medicines,
+        });
+      }
+
+      toast.success("Prescription uploaded and patient notified.");
+      navigate('/doctor');
+    } catch {
+      toast.error("Failed to send prescription");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -46,23 +235,96 @@ const UploadPrescription: React.FC = () => {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label>Patient</Label>
-                  <Select value={patient} onValueChange={setPatient}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Patient" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Alice Johnson">Alice Johnson (Token #13)</SelectItem>
-                      <SelectItem value="David Miller">David Miller (Token #14)</SelectItem>
-                      <SelectItem value="Eve White">Eve White (Token #15)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {prefill && prefill.patient && prefill.appointment ? (
+                  <div className="grid gap-2">
+                    <Label>Patient</Label>
+                    <div className="p-3 rounded-lg border bg-muted/40">
+                      <p className="font-semibold">{prefill.patient.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Token #{prefill.appointment.queueNumber} • {prefill.appointment.timeSlot}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Email: {prefill.patient.email}
+                      </p>
+                      {prefill.patient.phone && (
+                        <p className="text-xs text-muted-foreground">
+                          Phone: {prefill.patient.phone}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <Label>Patient</Label>
+                    <Select
+                      value={patient}
+                      onValueChange={(value) => {
+                        setPatient(value);
+                        const selectedAppointment = appointments.find((apt) => apt.id === value);
+                        if (
+                          selectedAppointment &&
+                          !diagnosis &&
+                          selectedAppointment.reasonForVisit
+                        ) {
+                          setDiagnosis(selectedAppointment.reasonForVisit);
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            appointmentsLoading ? 'Loading appointments...' : 'Select Patient'
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {appointments.map((apt) => (
+                          <SelectItem key={apt.id} value={apt.id}>
+                            {apt.patient.name} (Token #{apt.queueNumber}) • {apt.timeSlot}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {patient && (
+                      <div className="p-3 rounded-lg border bg-muted/40 text-xs space-y-1">
+                        {(() => {
+                          const selectedAppointment = appointments.find(
+                            (apt) => apt.id === patient,
+                          );
+                          if (!selectedAppointment) {
+                            return null;
+                          }
+                          return (
+                            <>
+                              <p className="font-semibold">{selectedAppointment.patient.name}</p>
+                              <p className="text-muted-foreground">
+                                Token #{selectedAppointment.queueNumber} •{' '}
+                                {selectedAppointment.timeSlot}
+                              </p>
+                              <p className="text-muted-foreground">
+                                Email: {selectedAppointment.patient.email}
+                              </p>
+                              {selectedAppointment.patient.phone && (
+                                <p className="text-muted-foreground">
+                                  Phone: {selectedAppointment.patient.phone}
+                                </p>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid gap-2">
                   <Label>Diagnosis Notes</Label>
-                  <Textarea placeholder="Describe patient symptoms and diagnosis..." rows={4} />
+                  <Textarea
+                    placeholder="Describe patient symptoms and diagnosis..."
+                    rows={4}
+                    value={diagnosis}
+                    onChange={(e) => setDiagnosis(e.target.value)}
+                  />
                 </div>
               </div>
 
@@ -109,11 +371,48 @@ const UploadPrescription: React.FC = () => {
             <CardHeader>
               <CardTitle>Attachments</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center text-muted-foreground hover:bg-muted/30 transition-colors cursor-pointer">
-                <Upload className="w-8 h-8 mb-2 opacity-50" />
-                <p className="text-xs">Drag lab reports or scans here</p>
-              </div>
+            <CardContent className="space-y-3">
+              {!prefill && !patient && (
+                <p className="text-xs text-muted-foreground">
+                  Select a patient appointment to view uploaded attachments.
+                </p>
+              )}
+              {(prefill?.appointment?.id || patient) && recordsLoading && (
+                <p className="text-xs text-muted-foreground">Loading attachments...</p>
+              )}
+              {(prefill?.appointment?.id || patient) &&
+                !recordsLoading &&
+                records.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No attachments uploaded for this appointment.
+                  </p>
+                )}
+              {records.length > 0 && (
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {records.map((record) => (
+                    <div
+                      key={record.id}
+                      className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium truncate">{record.fileName}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {(record.fileSize / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8"
+                        onClick={() => handleDownloadRecord(record)}
+                      >
+                        <FileDown className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -136,9 +435,13 @@ const UploadPrescription: React.FC = () => {
               </div>
             </CardContent>
             <CardFooter>
-              <Button type="submit" className="w-full gap-2 h-11" disabled={!patient}>
+              <Button
+                type="submit"
+                className="w-full gap-2 h-11"
+                disabled={submitting || (!patient && !(prefill && prefill.patient))}
+              >
                 <Send className="w-4 h-4" />
-                Send Prescription
+                {submitting ? 'Sending...' : 'Send Prescription'}
               </Button>
             </CardFooter>
           </Card>

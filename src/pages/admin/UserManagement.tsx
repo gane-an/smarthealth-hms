@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -15,25 +15,65 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
+import api from '@/services/api';
+
+interface ManagedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'patient' | 'doctor' | 'admin';
+  isApproved: boolean;
+  blocked: boolean;
+  createdAt: string;
+}
 
 const UserManagement: React.FC = () => {
-  const [users, setUsers] = useState([
-    { id: 1, name: 'Alice Johnson', email: 'alice@example.com', role: 'patient', status: 'Active', joined: '2026-01-10' },
-    { id: 2, name: 'Dr. John Doe', email: 'j.doe@hospital.com', role: 'doctor', status: 'Active', joined: '2025-11-20' },
-    { id: 3, name: 'Bob Wilson', email: 'bob@example.com', role: 'patient', status: 'Blocked', joined: '2026-02-05' },
-    { id: 4, name: 'Admin Jane', email: 'admin@healsync.com', role: 'admin', status: 'Active', joined: '2025-01-01' },
-    { id: 5, name: 'Charlie Davis', email: 'charlie@example.com', role: 'patient', status: 'Active', joined: '2026-02-12' },
-  ]);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const toggleStatus = (id: number) => {
-    setUsers(users.map(u => {
-      if (u.id === id) {
-        const newStatus = u.status === 'Active' ? 'Blocked' : 'Active';
-        toast.info(`User ${u.name} is now ${newStatus}`);
-        return { ...u, status: newStatus };
-      }
-      return u;
-    }));
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<ManagedUser[]>('/admin/users');
+      setUsers(res.data);
+    } catch {
+      toast.error('Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const toggleStatus = async (id: string) => {
+    try {
+      const user = users.find(u => u.id === id);
+      if (!user || user.role === 'admin') return;
+      const newApproved = !user.isApproved;
+      await api.patch(`/admin/users/${id}/status`, { isApproved: newApproved });
+      setUsers(users.map(u => (u.id === id ? { ...u, isApproved: newApproved } : u)));
+      toast.info(`User ${user.name} is now ${newApproved ? 'Active' : 'Inactive'}`);
+    } catch {
+      toast.error('Failed to update user status');
+    }
+  };
+
+  const toggleBlocked = async (id: string) => {
+    try {
+      const user = users.find(u => u.id === id);
+      if (!user || user.role === 'admin') return;
+      const currentlyBlocked = user.blocked;
+      const endpoint = currentlyBlocked ? `/admin/users/${id}/unblock` : `/admin/users/${id}/block`;
+      const res = await api.patch<ManagedUser>(endpoint);
+      setUsers(users.map(u => (u.id === id ? { ...u, blocked: res.data.blocked } : u)));
+      toast.info(
+        `User ${user.name} is now ${res.data.blocked ? 'Blocked' : 'Unblocked'}`,
+      );
+    } catch (error) {
+      toast.error('Failed to update user block status');
+    }
   };
 
   return (
@@ -70,6 +110,7 @@ const UserManagement: React.FC = () => {
               <TableHead>User</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Blocked</TableHead>
               <TableHead>Joined Date</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -98,14 +139,28 @@ const UserManagement: React.FC = () => {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge 
-                    variant={user.status === 'Active' ? 'secondary' : 'destructive'}
-                    className={`text-[10px] font-bold uppercase ${user.status === 'Active' ? 'bg-green-100 text-green-700 hover:bg-green-100' : ''}`}
+                  <Badge
+                    variant={user.isApproved ? 'secondary' : 'outline'}
+                    className={`text-[10px] font-bold uppercase ${
+                      user.isApproved
+                        ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                        : ''
+                    }`}
                   >
-                    {user.status}
+                    {user.isApproved ? 'Active' : 'Inactive'}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground">{user.joined}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant={user.blocked ? 'destructive' : 'outline'}
+                    className="text-[10px] font-bold uppercase"
+                  >
+                    {user.blocked ? 'Blocked' : 'Allowed'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {new Date(user.createdAt).toISOString().split('T')[0]}
+                </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -115,17 +170,37 @@ const UserManagement: React.FC = () => {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuItem>View Details</DropdownMenuItem>
-                      <DropdownMenuItem>Edit Permissions</DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
+                        disabled={user.role === 'admin'}
                         onClick={() => toggleStatus(user.id)}
-                        className={user.status === 'Active' ? 'text-destructive' : 'text-green-600'}
+                        className={
+                          user.isApproved ? 'text-destructive' : 'text-green-600'
+                        }
                       >
-                        {user.status === 'Active' ? (
-                          <span className="flex items-center gap-2"><Ban className="w-4 h-4" /> Block User</span>
+                        {user.isApproved ? (
+                          <span className="flex items-center gap-2">
+                            <Ban className="w-4 h-4" /> Deactivate User
+                          </span>
                         ) : (
-                          <span className="flex items-center gap-2"><Check className="w-4 h-4" /> Unblock User</span>
+                          <span className="flex items-center gap-2">
+                            <Check className="w-4 h-4" /> Activate User
+                          </span>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        disabled={user.role === 'admin'}
+                        onClick={() => toggleBlocked(user.id)}
+                        className={user.blocked ? 'text-green-600' : 'text-destructive'}
+                      >
+                        {user.blocked ? (
+                          <span className="flex items-center gap-2">
+                            <Check className="w-4 h-4" /> Unblock User
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <Ban className="w-4 h-4" /> Block User
+                          </span>
                         )}
                       </DropdownMenuItem>
                     </DropdownMenuContent>

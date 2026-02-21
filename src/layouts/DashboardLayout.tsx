@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -29,6 +29,37 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
+const RealTimeClock: React.FC = () => {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
+  const pad = (value: number) => value.toString().padStart(2, '0');
+
+  const day = pad(now.getDate());
+  const month = pad(now.getMonth() + 1);
+  const year = now.getFullYear();
+  const hours = pad(now.getHours());
+  const minutes = pad(now.getMinutes());
+  const seconds = pad(now.getSeconds());
+
+  const formatted = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+
+  return (
+    <div className="hidden md:flex items-center text-xs text-muted-foreground font-mono">
+      {formatted}
+    </div>
+  );
+};
+
 const DashboardLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const { language, setLanguage, t } = useLanguage();
@@ -47,19 +78,21 @@ const DashboardLayout: React.FC = () => {
 
   const menuItems = {
     patient: [
-      { icon: LayoutDashboard, label: t('dashboard'), path: '/patient' },
+      { icon: LayoutDashboard, label: t('dashboard'), path: '/patient/dashboard' },
       { icon: Calendar, label: t('book_appointment'), path: '/patient/book' },
+      { icon: Calendar, label: t('appointments'), path: '/patient/appointments' },
+      { icon: Users, label: t('available_departments'), path: '/patient/departments' },
       { icon: Users, label: t('queue'), path: '/patient/queue' },
       { icon: FileText, label: t('prescriptions'), path: '/patient/prescriptions' },
       { icon: MessageSquare, label: t('feedback'), path: '/patient/feedback' },
     ],
     doctor: [
-      { icon: LayoutDashboard, label: t('dashboard'), path: '/doctor' },
+      { icon: LayoutDashboard, label: t('dashboard'), path: '/doctor/dashboard' },
       { icon: Calendar, label: t('appointments'), path: '/doctor/appointments' },
       { icon: FileText, label: t('prescriptions'), path: '/doctor/prescriptions' },
     ],
     admin: [
-      { icon: BarChart3, label: t('analytics'), path: '/admin' },
+      { icon: BarChart3, label: t('analytics'), path: '/admin/dashboard' },
       { icon: Settings, label: t('departments'), path: '/admin/departments' },
       { icon: UserCheck, label: t('doctor_approvals'), path: '/admin/approvals' },
       { icon: Users, label: t('user_management'), path: '/admin/users' },
@@ -86,8 +119,8 @@ const DashboardLayout: React.FC = () => {
                   to={item.path}
                   onClick={() => setIsSidebarOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive 
-                      ? 'bg-primary text-primary-foreground shadow-sm' 
+                    isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   }`}
                 >
@@ -96,6 +129,7 @@ const DashboardLayout: React.FC = () => {
                 </Link>
               );
             })}
+
           </nav>
 
           <div className="p-4 border-t">
@@ -121,6 +155,7 @@ const DashboardLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
+            <RealTimeClock />
             <Button variant="ghost" size="icon" onClick={toggleLanguage} title={t('language')}>
               <Languages className="w-5 h-5" />
             </Button>

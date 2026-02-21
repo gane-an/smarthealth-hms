@@ -43,6 +43,12 @@ export const translations: Translation = {
   'feedback': { en: 'Feedback', ta: 'கருத்து' },
   'analytics': { en: 'Analytics', ta: 'பகுப்பாய்வு' },
   'departments': { en: 'Departments', ta: 'துறைகள்' },
+  'available_departments': { en: 'Available Departments', ta: 'கிடைக்கும் துறைகள்' },
+  'booking_rules_title': { en: 'Booking rules', ta: 'பதிவு விதிகள்' },
+  'booking_rules_description': {
+    en: 'You can book one appointment per day in each department, and you cannot have two appointments at the same time on the same day. Cancelling an appointment frees that time slot so it can be booked again.',
+    ta: 'ஒவ்வொரு துறையிலும் ஒரு நாளுக்கு ஒரு சந்திப்பை בלבד பதிவு செய்யலாம். அதே நாளில் ஒரே நேரத்தில் இரண்டு சந்திப்புகளை வைத்திருக்க முடியாது. ஒரு சந்திப்பை ரத்து செய்தால் அந்த நேரம் மீண்டும் பதிவு செய்யக்கூடியதாக இருக்கும்.'
+  },
   
   // Patient Dashboard
   'upcoming_appointment': { en: 'Upcoming Appointment', ta: 'வரவிருக்கும் சந்திப்பு' },

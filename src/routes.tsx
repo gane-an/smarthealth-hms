@@ -8,6 +8,7 @@ import LiveQueue from './pages/patient/LiveQueue';
 import MyAppointments from './pages/patient/MyAppointments';
 import Prescriptions from './pages/patient/Prescriptions';
 import FeedbackPage from './pages/patient/FeedbackPage';
+import AvailableDepartments from './pages/patient/AvailableDepartments';
 import DoctorDashboard from './pages/doctor/DoctorDashboard';
 import AppointmentList from './pages/doctor/AppointmentList';
 import UploadPrescription from './pages/doctor/UploadPrescription';
@@ -17,6 +18,7 @@ import DoctorApprovals from './pages/admin/DoctorApprovals';
 import UserManagement from './pages/admin/UserManagement';
 import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { RouteGuard } from './components/common/RouteGuard';
 
 export interface RouteConfig {
   name: string;
@@ -43,10 +45,16 @@ const routes: RouteConfig[] = [
   {
     name: 'Patient',
     path: '/patient',
-    element: <DashboardLayout />,
+    element: (
+      <RouteGuard roles={['patient']}>
+        <DashboardLayout />
+      </RouteGuard>
+    ),
     children: [
-      { name: 'Patient Dashboard', path: '', element: <PatientDashboard /> },
+      { name: 'Patient Dashboard', path: '', element: <Navigate to="/patient/dashboard" replace /> },
+      { name: 'Patient Dashboard', path: 'dashboard', element: <PatientDashboard /> },
       { name: 'Book Appointment', path: 'book', element: <BookAppointment /> },
+      { name: 'Available Departments', path: 'departments', element: <AvailableDepartments /> },
       { name: 'Live Queue', path: 'queue', element: <LiveQueue /> },
       { name: 'My Appointments', path: 'appointments', element: <MyAppointments /> },
       { name: 'Prescriptions', path: 'prescriptions', element: <Prescriptions /> },
@@ -58,9 +66,14 @@ const routes: RouteConfig[] = [
   {
     name: 'Doctor',
     path: '/doctor',
-    element: <DashboardLayout />,
+    element: (
+      <RouteGuard roles={['doctor']}>
+        <DashboardLayout />
+      </RouteGuard>
+    ),
     children: [
-      { name: 'Doctor Dashboard', path: '', element: <DoctorDashboard /> },
+      { name: 'Doctor Dashboard', path: '', element: <Navigate to="/doctor/dashboard" replace /> },
+      { name: 'Doctor Dashboard', path: 'dashboard', element: <DoctorDashboard /> },
       { name: 'Appointments', path: 'appointments', element: <AppointmentList /> },
       { name: 'Prescriptions', path: 'prescriptions', element: <UploadPrescription /> },
     ],
@@ -70,9 +83,14 @@ const routes: RouteConfig[] = [
   {
     name: 'Admin',
     path: '/admin',
-    element: <DashboardLayout />,
+    element: (
+      <RouteGuard roles={['admin']}>
+        <DashboardLayout />
+      </RouteGuard>
+    ),
     children: [
-      { name: 'Admin Dashboard', path: '', element: <AdminDashboard /> },
+      { name: 'Admin Dashboard', path: '', element: <Navigate to="/admin/dashboard" replace /> },
+      { name: 'Admin Dashboard', path: 'dashboard', element: <AdminDashboard /> },
       { name: 'Departments', path: 'departments', element: <DepartmentManagement /> },
       { name: 'Approvals', path: 'approvals', element: <DoctorApprovals /> },
       { name: 'Users', path: 'users', element: <UserManagement /> },

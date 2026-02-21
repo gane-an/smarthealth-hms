@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, type UserRole } from '@/contexts/AuthContext';
 
 interface RouteGuardProps {
   children: React.ReactNode;
+  roles?: UserRole[];
 }
 
-// Please add the pages that can be accessed without logging in to PUBLIC_ROUTES.
-const PUBLIC_ROUTES = ['/login', '/403', '/404',"/"];
+const PUBLIC_ROUTES = ['/login', '/403', '/404', '/', '/register', '/forgot-password'];
 
 function matchPublicRoute(path: string, patterns: string[]) {
   return patterns.some(pattern => {
@@ -19,7 +19,14 @@ function matchPublicRoute(path: string, patterns: string[]) {
   });
 }
 
-export function RouteGuard({ children }: RouteGuardProps) {
+function getDashboardPath(role: UserRole) {
+  if (role === 'patient') return '/patient/dashboard';
+  if (role === 'doctor') return '/doctor/dashboard';
+  if (role === 'admin') return '/admin/dashboard';
+  return '/';
+}
+
+export function RouteGuard({ children, roles }: RouteGuardProps) {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,6 +38,14 @@ export function RouteGuard({ children }: RouteGuardProps) {
 
     if (!user && !isPublic) {
       navigate('/login', { state: { from: location.pathname }, replace: true });
+      return;
+    }
+
+    if (user && roles && roles.length > 0 && !roles.includes(user.role)) {
+      const target = getDashboardPath(user.role);
+      if (location.pathname !== target) {
+        navigate(target, { replace: true });
+      }
     }
   }, [user, loading, location.pathname, navigate]);
 

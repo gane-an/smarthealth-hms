@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import api from '@/services/api';
 
 const RegisterPage: React.FC = () => {
   const { register } = useAuth();
@@ -16,25 +17,75 @@ const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: '',
+    dateOfBirth: '',
+    gender: '' as '' | 'male' | 'female' | 'other',
     email: '',
     password: '',
     role: 'patient' as UserRole,
+    departmentId: '',
+    licenseId: '',
+    availabilitySchedule: '',
+    degrees: '',
   });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [doctorDocument, setDoctorDocument] = useState<File | null>(null);
+
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const res = await api.get<{ id: string; name: string }[]>('/auth/departments');
+        setDepartments(res.data);
+      } catch {
+      }
+    };
+    loadDepartments();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
     try {
-      await register(formData);
+      if (!formData.dateOfBirth) {
+        setError('Date of birth is required');
+        setLoading(false);
+        return;
+      }
+      if (!formData.gender) {
+        setError('Gender is required');
+        setLoading(false);
+        return;
+      }
+
+      if (formData.role === 'doctor' && !doctorDocument) {
+        setError('Approval document is required for doctor registration');
+        setLoading(false);
+        return;
+      }
+
+      await register({
+        ...formData,
+        dateOfBirth: formData.dateOfBirth,
+        gender: formData.gender || 'other',
+        doctorDocument,
+      });
       if (formData.role === 'doctor') {
         setSuccess(true);
       } else {
-        navigate('/patient');
+        navigate('/patient/dashboard');
       }
-    } catch (error) {
-      console.error(error);
+    } catch (err: unknown) {
+      if (typeof err === 'object' && err !== null && 'response' in err) {
+        const axiosErr = err as { response?: { data?: { message?: string } } };
+        setError(axiosErr.response?.data?.message || 'Registration failed');
+      } else {
+        setError('Registration failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -78,6 +129,49 @@ const RegisterPage: React.FC = () => {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="grid gap-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <div className="grid gap-2">
+            <Label htmlFor="name">Full Name</Label>
+            <Input 
+              id="name" 
+              placeholder="Dr. Jane Smith" 
+              required 
+              value={formData.name}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="dob">Date of Birth</Label>
+            <Input
+              id="dob"
+              type="date"
+              required
+              value={formData.dateOfBirth}
+              onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="gender">Gender</Label>
+            <Select
+              value={formData.gender}
+              onValueChange={(v) =>
+                setFormData({ ...formData, gender: v as 'male' | 'female' | 'other' })
+              }
+            >
+              <SelectTrigger id="gender">
+                <SelectValue placeholder="Select gender" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Male</SelectItem>
+                <SelectItem value="female">Female</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid gap-2">
             <Label htmlFor="role">{t('role')}</Label>
             <Select 
@@ -94,24 +188,73 @@ const RegisterPage: React.FC = () => {
             </Select>
           </div>
           {formData.role === 'doctor' && (
-            <Alert className="bg-primary/5 border-primary/20">
-              <ShieldCheck className="h-4 w-4 text-primary" />
-              <AlertTitle className="text-xs font-semibold">Verification Required</AlertTitle>
-              <AlertDescription className="text-[10px]">
-                Doctor accounts require manual approval by an administrator.
-              </AlertDescription>
-            </Alert>
+            <>
+              <Alert className="bg-primary/5 border-primary/20">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                <AlertTitle className="text-xs font-semibold">Verification Required</AlertTitle>
+                <AlertDescription className="text-[10px]">
+                  Doctor accounts require manual approval by an administrator.
+                </AlertDescription>
+              </Alert>
+              <div className="grid gap-2">
+                <Label htmlFor="department">Department</Label>
+                <Select
+                  value={formData.departmentId}
+                  onValueChange={(v) => setFormData({ ...formData, departmentId: v })}
+                >
+                  <SelectTrigger id="department">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="degrees">Degrees / Qualifications</Label>
+                <Input
+                  id="degrees"
+                  placeholder="MBBS, MD, DM"
+                  value={formData.degrees}
+                  onChange={(e) => setFormData({ ...formData, degrees: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="license">License ID (optional)</Label>
+                <Input
+                  id="license"
+                  placeholder="LC-12345"
+                  value={formData.licenseId}
+                  onChange={(e) => setFormData({ ...formData, licenseId: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="availability">Availability Schedule (optional)</Label>
+                <Input
+                  id="availability"
+                  placeholder="Mon-Fri 10:00-16:00"
+                  value={formData.availabilitySchedule}
+                  onChange={(e) => setFormData({ ...formData, availabilitySchedule: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="approvalDocument">Approval Document (PDF, JPG, PNG, max 5MB)</Label>
+                <Input
+                  id="approvalDocument"
+                  type="file"
+                  accept=".pdf,image/jpeg,image/png"
+                  onChange={(e) => {
+                    const file = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                    setDoctorDocument(file);
+                  }}
+                />
+              </div>
+            </>
           )}
-          <div className="grid gap-2">
-            <Label htmlFor="name">Full Name</Label>
-            <Input 
-              id="name" 
-              placeholder="Dr. Jane Smith" 
-              required 
-              value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
-            />
-          </div>
           <div className="grid gap-2">
             <Label htmlFor="email">{t('email')}</Label>
             <Input 

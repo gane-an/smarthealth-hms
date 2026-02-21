@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  patient
+  doctor
+  admin
+}
+
+enum AppointmentStatus {
+  booked
+  in_consultation
+  completed
+  cancelled
+}
+
+enum Gender {
+  male
+  female
+  other
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  name                String
+  email               String    @unique
+  phone               String?
+  passwordHash        String    @map("password_hash")
+  role                UserRole
+  languagePreference  String    @map("language_preference")
+  isApproved          Boolean   @default(false) @map("is_approved")
+  blocked             Boolean   @default(false)
+  createdAt           DateTime  @default(now()) @map("created_at")
+  dateOfBirth         DateTime? @map("date_of_birth")
+  gender              Gender?
+
+  doctor              Doctor?
+  patientAppointments Appointment[] @relation("PatientAppointments")
+  prescriptions       Prescription[] @relation("PatientPrescriptions")
+  medicalRecordsCreated MedicalRecord[] @relation("MedicalRecordsCreated")
+  medicalRecordsUpdated MedicalRecord[] @relation("MedicalRecordsUpdated")
+  userAuditLogs       UserAuditLog[] @relation("UserAuditUser")
+  performedAuditLogs  UserAuditLog[] @relation("UserAuditPerformer")
+
+  @@map("users")
+}
+
+model Department {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  doctors   Doctor[]
+
+  @@map("departments")
+}
+
+model Doctor {
+  id                   String     @id @default(uuid())
+  userId               String     @unique
+  departmentId         String?
+  licenseId            String?    @map("license_id")
+  availabilitySchedule String?    @map("availability_schedule")
+  approvalStatus       String     @default("pending") @map("approval_status")
+  degrees              String?
+  approvalDocumentPath String?    @map("approval_document_path")
+
+  user       User       @relation(fields: [userId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  appointments Appointment[] @relation("DoctorAppointments")
+  prescriptions Prescription[] @relation("DoctorPrescriptions")
+
+  @@map("doctors")
+  @@index([departmentId], name: "idx_doctors_department")
+}
+
+model Appointment {
+  id          String             @id @default(uuid())
+  patientId   String
+  doctorId    String
+  date        DateTime
+  timeSlot    String
+  status      AppointmentStatus  @default(booked)
+  queueNumber Int
+  isEmergency Boolean            @default(false)
+  reasonForVisit String?         @map("reason_for_visit")
+  notes          String?
+
+  patient User   @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctor  Doctor @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  prescriptions Prescription[] @relation("AppointmentPrescriptions")
+  medicalRecords MedicalRecord[]
+  logs           AppointmentLog[]
+
+  @@index([doctorId, date, status, queueNumber], name: "idx_appointments_doctor_date_status_queue")
+  @@index([patientId, date], name: "idx_appointments_patient_date")
+  @@index([patientId, date, status], name: "idx_appointments_patient_date_status")
+  @@index([patientId, date, timeSlot, status], name: "idx_appointments_patient_date_time_status")
+  @@map("appointments")
+}
+
+model MedicalRecord {
+  id           String   @id @default(uuid())
+  appointmentId String
+  fileName     String
+  fileType     String
+  fileSize     Int
+  storagePath  String
+  createdById  String
+  updatedById  String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  createdBy   User        @relation("MedicalRecordsCreated", fields: [createdById], references: [id])
+  updatedBy   User        @relation("MedicalRecordsUpdated", fields: [updatedById], references: [id])
+
+  @@index([appointmentId], name: "idx_medical_records_appointment")
+  @@index([createdAt], name: "idx_medical_records_created_at")
+  @@map("medical_records")
+}
+
+model Prescription {
+  id            String   @id @default(uuid())
+  appointmentId String
+  doctorId      String
+  patientId     String
+  diagnosis     String?
+  medicinesJson String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  appointment Appointment @relation("AppointmentPrescriptions", fields: [appointmentId], references: [id])
+  doctor      Doctor      @relation("DoctorPrescriptions", fields: [doctorId], references: [id])
+  patient     User        @relation("PatientPrescriptions", fields: [patientId], references: [id])
+
+  @@map("prescriptions")
+}
+
+model SystemConfig {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String
+
+  @@map("system_config")
+}
+
+model AppointmentLog {
+  id            String            @id @default(uuid())
+  appointmentId String
+  fromStatus    AppointmentStatus?
+  toStatus      AppointmentStatus
+  reason        String?
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@index([appointmentId], name: "idx_appointment_logs_appointment")
+  @@map("appointment_logs")
+}
+
+model UserAuditLog {
+  id            String   @id @default(uuid())
+  userId        String
+  performedById String
+  action        String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user       User @relation("UserAuditUser", fields: [userId], references: [id])
+  performedBy User @relation("UserAuditPerformer", fields: [performedById], references: [id])
+
+  @@index([userId], name: "idx_user_audit_user")
+  @@index([createdAt], name: "idx_user_audit_created_at")
+  @@map("user_audit_logs")
+}

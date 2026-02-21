@@ -1,22 +1,62 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Check, X, ShieldCheck, Eye, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import api from '@/services/api';
+
+interface PendingDoctor {
+  id: string;
+  name: string;
+  email: string;
+  doctor?: {
+    id: string;
+    licenseId?: string | null;
+    approvalStatus: string;
+    degrees?: string | null;
+    approvalDocumentPath?: string | null;
+    department?: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
+}
 
 const DoctorApprovals: React.FC = () => {
-  const [pendingDoctors, setPendingDoctors] = useState([
-    { id: 1, name: 'Dr. Michael Chen', dept: 'Cardiology', email: 'm.chen@hospital.com', exp: '10 years', license: 'LC-12345' },
-    { id: 2, name: 'Dr. Emily Watson', dept: 'Pediatrics', email: 'e.watson@hospital.com', exp: '6 years', license: 'LC-67890' },
-    { id: 3, name: 'Dr. James Rodriguez', dept: 'Neurology', email: 'j.rod@hospital.com', exp: '15 years', license: 'LC-11223' },
-  ]);
+  const [pendingDoctors, setPendingDoctors] = useState<PendingDoctor[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleAction = (id: number, approved: boolean) => {
-    setPendingDoctors(pendingDoctors.filter(d => d.id !== id));
-    if (approved) toast.success("Doctor approved and granted access.");
-    else toast.error("Doctor application rejected.");
+  const loadPending = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<PendingDoctor[]>('/admin/doctors/pending');
+      setPendingDoctors(res.data);
+    } catch {
+      toast.error('Failed to load pending doctors');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPending();
+  }, []);
+
+  const handleAction = async (id: string, approved: boolean) => {
+    try {
+      if (approved) {
+        await api.post(`/admin/doctors/${id}/approve`);
+        toast.success('Doctor approved and granted access.');
+      } else {
+        await api.post(`/admin/doctors/${id}/reject`);
+        toast.error('Doctor application rejected.');
+      }
+      setPendingDoctors(pendingDoctors.filter(d => d.id !== id));
+    } catch {
+      toast.error('Failed to update doctor status');
+    }
   };
 
   return (
@@ -37,7 +77,12 @@ const DoctorApprovals: React.FC = () => {
                 </Avatar>
                 <div className="text-center">
                   <p className="font-bold">{doc.name}</p>
-                  <p className="text-xs text-muted-foreground">{doc.dept}</p>
+                  <p className="text-xs text-muted-foreground">{doc.doctor?.department?.name || 'Unassigned'}</p>
+                  {doc.doctor?.degrees && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {doc.doctor.degrees}
+                    </p>
+                  )}
                 </div>
               </div>
               
@@ -49,11 +94,11 @@ const DoctorApprovals: React.FC = () => {
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground">Experience</p>
-                    <p className="text-sm font-medium">{doc.exp}</p>
+                    <p className="text-sm font-medium">-</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground">License No.</p>
-                    <p className="text-sm font-medium">{doc.license}</p>
+                    <p className="text-sm font-medium">{doc.doctor?.licenseId || '-'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] uppercase font-bold text-muted-foreground">Status</p>
@@ -65,9 +110,26 @@ const DoctorApprovals: React.FC = () => {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" className="gap-1">
-                    <FileText className="w-4 h-4" /> View Documents
-                  </Button>
+                  {doc.doctor?.approvalDocumentPath ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1"
+                      asChild
+                    >
+                      <a
+                        href={`${(api.defaults.baseURL || '').replace(/\/api$/, '')}/api/admin/doctors/${doc.id}/document`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <FileText className="w-4 h-4" /> View Documents
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" className="gap-1" disabled>
+                      <FileText className="w-4 h-4" /> No Documents
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" className="gap-1">
                     <Eye className="w-4 h-4" /> Full Profile
                   </Button>
